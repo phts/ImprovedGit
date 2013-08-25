@@ -11,12 +11,20 @@
         "command": "git_new_tag"
     }
     ,{
+        "caption": "Git: Delete Tag",
+        "command": "git_delete_tag"
+    }
+    ,{
         "caption": "Git: Show Tags",
         "command": "git_show_tags"
     }
     ,{
         "caption": "Git: Push Tags",
         "command": "git_push_tags"
+    }
+    ,{
+        "caption": "Git: Checkout Tag",
+        "command": "git_checkout_tag"
     }
     ,{
         "caption": "Git: Log Current File",
@@ -65,6 +73,10 @@
     ,{
         "caption": "Git: Quick Commit",
         "command": "git_quick_commit"
+    }
+    ,{
+        "caption": "Git: Checkout Commit",
+        "command": "git_checkout_commit"
     }
     ,{
         "caption": "Git: Status",
@@ -147,6 +159,10 @@
         "command": "git_toggle_annotations"
     }
     ,{
+        "caption": "Git: Cherry Pick",    
+        "command": "git_cherry_pick"
+    }
+    ,{
         "caption": "Git: Custom Command",
         "command": "git_custom"
     }
@@ -205,6 +221,10 @@
     ,{
         "caption": "Git: Gitk",
         "command": "git_gitk"
+    }
+    ,{
+        "caption": "Git: GitX",
+        "command": "git_gitx"
     }
     ,{
         "caption": "Git: Commit history",

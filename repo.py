@@ -1,7 +1,7 @@
 import os
 
 import sublime
-from git import GitTextCommand, GitWindowCommand, git_root_exist
+from .git import GitTextCommand, GitWindowCommand, git_root_exist
 
 
 class GitInit(object):
@@ -49,10 +49,33 @@ class GitBranchCommand(GitWindowCommand):
         self.run_command(['git'] + self.command_to_run_after_branch + [picked_branch], self.update_status)
 
     def update_status(self, result):
+        self.panel(result)
         global branch
         branch = ""
         for view in self.window.views():
             view.run_command("git_branch_status")
+
+
+class GitPullCommand(GitWindowCommand):
+    command_to_run_after_remote = 'pull'
+    extra_flags = []
+
+    def run(self):
+        self.run_command(['git', 'remote'], callback=self.remote_done) 
+
+    def remote_done(self, result):
+        self.remotes = result.rstrip().split('\n')
+        if len(self.remotes) == 1:
+            self.panel_done()
+        else:
+            self.quick_panel(self.remotes, self.panel_done, sublime.MONOSPACE_FONT)
+    
+    def panel_done(self, picked=0):
+        if picked < 0 or picked >= len(self.remotes):
+            return
+        self.picked_remote = self.remotes[picked]
+        self.picked_remote = self.picked_remote.strip()
+        self.run_command(['git', self.command_to_run_after_remote, self.picked_remote] + self.extra_flags, callback=self.panel)
 
 
 class GitMergeCommand(GitBranchCommand):
@@ -87,6 +110,26 @@ class GitNewTagCommand(GitWindowCommand):
         self.run_command(['git', 'tag', tagname])
 
 
+class GitDeleteTagCommand(GitWindowCommand):
+    def run(self):
+        self.run_command(['git', 'tag'], self.fetch_tag)
+
+    def fetch_tag(self, result):
+        if result.strip() == "":
+            sublime.status_message("No Tags provided.")
+            return
+        self.results = result.rstrip().split('\n')
+        self.quick_panel(self.results, self.panel_done)
+
+    def panel_done(self, picked):
+        if 0 > picked < len(self.results):
+            return
+        picked_tag = self.results[picked]
+        picked_tag = picked_tag.strip()
+        if sublime.ok_cancel_dialog("Delete \"%s\" Tag?" % picked_tag, "Delete"):   
+            self.run_command(['git', 'tag', '-d', picked_tag])
+
+
 class GitShowTagsCommand(GitWindowCommand):
     def run(self):
         self.run_command(['git', 'tag'], self.fetch_tag)
@@ -103,9 +146,28 @@ class GitShowTagsCommand(GitWindowCommand):
         self.run_command(['git', 'show', picked_tag])
 
 
-class GitPushTagsCommand(GitWindowCommand):
+class GitPushTagsCommand(GitPullCommand):
+    command_to_run_after_remote = 'push'
+    extra_flags = ['--tags']
+
+
+class GitCheckoutTagCommand(GitWindowCommand):
     def run(self):
-        self.run_command(['git', 'push', '--tags'])
+        self.run_command(['git', 'tag'], self.fetch_tag)
+
+    def fetch_tag(self, result):
+        if result.strip() == "":
+            sublime.status_message("No Tags provided.")
+            return
+        self.results = result.rstrip().split('\n')
+        self.quick_panel(self.results, self.panel_done)
+
+    def panel_done(self, picked):
+        if 0 > picked < len(self.results):
+            return
+        picked_tag = self.results[picked]
+        picked_tag = picked_tag.strip()
+        self.run_command(['git', 'checkout', "tags/%s" % picked_tag])
 
 
 class GitCheckoutCommand(GitTextCommand):
@@ -113,23 +175,39 @@ class GitCheckoutCommand(GitTextCommand):
 
     def run(self, edit):
         self.run_command(['git', 'checkout', self.get_file_name()])
+        
 
+class GitCheckoutCommitCommand(GitWindowCommand):
+    may_change_files = True
 
-class GitFetchCommand(GitWindowCommand):
     def run(self):
-        self.run_command(['git', 'fetch'], callback=self.panel)
+        command = ['git', 'log', '--all', '--pretty=%s\a%h %an <%aE>\a%ad (%ar)', '--date=local', '--max-count=9000']
+        self.run_command(command, callback=self.log_done)
 
+    def log_done(self, result):
+        self.results = [r.split('\a', 2) for r in result.strip().split('\n')]
+        self.quick_panel(self.results, self.log_panel_done)
 
-class GitPullCommand(GitWindowCommand):
-    def run(self):
-        self.run_command(['git', 'pull'], callback=self.panel)
+    def log_panel_done(self, picked):
+        print(picked)
+        if 0 > picked < len(self.results):
+            return
+        item = self.results[picked]
+        self.cherry_pick(item[1].split(' ')[0])
+
+    def cherry_pick(self, ref):
+        self.run_command(['git', 'checkout', ref])
+        
+
+class GitFetchCommand(GitPullCommand):
+    command_to_run_after_remote = 'fetch'
 
 
 class GitPullCurrentBranchCommand(GitWindowCommand):
     command_to_run_after_describe = 'pull'
 
     def run(self):
-        self.run_command(['git', 'describe', '--contains',  '--all', 'HEAD'], callback=self.describe_done)
+        self.run_command(['git', 'rev-parse',  '--abbrev-ref', 'HEAD'], callback=self.describe_done)
 
     def describe_done(self, result):
         self.current_branch = result.strip()
@@ -150,10 +228,30 @@ class GitPullCurrentBranchCommand(GitWindowCommand):
         self.run_command(['git', self.command_to_run_after_describe, self.picked_remote, self.current_branch])
 
 
-class GitPushCommand(GitWindowCommand):
-    def run(self):
-        self.run_command(['git', 'push'], callback=self.panel)
+class GitPushCommand(GitPullCommand):
+    command_to_run_after_remote = 'push'
 
 
 class GitPushCurrentBranchCommand(GitPullCurrentBranchCommand):
     command_to_run_after_describe = 'push'
+
+
+class GitCherryPickCommand(GitWindowCommand):
+    
+    def run(self):
+        command = ['git', 'log', '--all', '--pretty=%s\a%h %an <%aE>\a%ad (%ar)', '--date=local', '--max-count=9000']
+        self.run_command(command, callback=self.log_done)
+
+    def log_done(self, result):
+        self.results = [r.split('\a', 2) for r in result.strip().split('\n')]
+        self.quick_panel(self.results, self.log_panel_done)
+
+    def log_panel_done(self, picked):
+        print(picked)
+        if 0 > picked < len(self.results):
+            return
+        item = self.results[picked]
+        self.cherry_pick(item[1].split(' ')[0])
+
+    def cherry_pick(self, ref):
+        self.run_command(['git', 'cherry-pick', ref])

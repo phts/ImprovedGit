@@ -1,6 +1,6 @@
 import sublime
 import re
-from git import git_root, GitTextCommand, GitWindowCommand
+from .git import git_root, GitTextCommand, GitWindowCommand
 import functools
 
 
@@ -26,10 +26,11 @@ class GitDiff (object):
             self.panel("No output")
             return
         s = sublime.load_settings("Git.sublime-settings")
+        syntax = s.get("diff_syntax", "Packages/Diff/Diff.tmLanguage")
         if s.get('diff_panel'):
-            view = self.panel(result)
+            view = self.panel(result, syntax=syntax)
         else:
-            view = self.scratch(result, title="Git Diff")
+            view = self.scratch(result, title="Git Diff", syntax=syntax)
 
         lines_inserted = view.find_all(r'^\+[^+]{2} ')
         lines_deleted = view.find_all(r'^-[^-]{2} ')
@@ -51,7 +52,9 @@ class GitDiffCommit (object):
         if not result.strip():
             self.panel("No output")
             return
-        self.scratch(result, title="Git Diff")
+        s = sublime.load_settings("Git.sublime-settings")
+        syntax = s.get("diff_syntax", "Packages/Diff/Diff.tmLanguage")
+        self.scratch(result, title="Git Diff", syntax=syntax)
 
 
 class GitDiffCommand(GitDiff, GitTextCommand):
