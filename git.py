@@ -392,6 +392,12 @@ class GitGitkCommand(GitTextCommand):
         self.run_command(command)
 
 
+class GitGitkAllCommand(GitTextCommand):
+    def run(self, edit):
+        command = ['gitk', '--all']
+        self.run_command(command)
+
+
 class GitGitxCommand(GitTextCommand):
 
     def is_enabled(self):
