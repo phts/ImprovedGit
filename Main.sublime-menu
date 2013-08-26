@@ -13,6 +13,7 @@
                         [
                              { "caption": "Log", "command": "git_log" }
                             ,{ "caption": "Graph", "command": "git_graph" }
+                            ,{ "caption": "Gitk", "command": "git_gitk_file"}
                             ,{ "caption": "-" }
                             ,{ "caption": "Diff", "command": "git_diff" }
                             ,{ "caption": "DiffTool", "command": "git_diff_tool" }

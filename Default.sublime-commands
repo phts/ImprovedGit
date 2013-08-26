@@ -231,6 +231,10 @@
         "command": "git_gitk_all"
     }
     ,{
+        "caption": "Git: Gitk File",
+        "command": "git_gitk_file"
+    }
+    ,{
         "caption": "Git: GitX",
         "command": "git_gitx"
     }
