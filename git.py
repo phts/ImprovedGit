@@ -12,10 +12,13 @@ from .progress import Progress
 # In a complete inversion from ST2, in ST3 when a plugin is loaded we
 # actually can trust __file__.
 # Goal is to get: "Packages/Git", allowing for people who rename things
-FULL_PLUGIN_DIRECTORY = os.path.dirname(os.path.realpath(__file__))
-PLUGIN_DIRECTORY = FULL_PLUGIN_DIRECTORY.replace(os.path.normpath(os.path.join(FULL_PLUGIN_DIRECTORY, '..', '..')) + os.path.sep, '').replace(os.path.sep, '/')
 
 git_root_cache = {}
+
+def find_plugin_directory(f):
+    dirname = os.path.split(os.path.dirname(f))[-1]
+    return "Packages/" + dirname.replace(".sublime-package", "")
+PLUGIN_DIRECTORY = find_plugin_directory(__file__)
 
 
 def main_thread(callback, *args, **kwargs):
@@ -205,8 +208,9 @@ class GitCommand(object):
         if s.get('save_first') and self.active_view() and self.active_view().is_dirty() and not no_save:
             self.active_view().run_command('save')
         if command[0] == 'git':
-            if s.get('git_command'):
-                command[0] = s.get('git_command')
+            us = sublime.load_settings('Preferences.sublime-settings')
+            if s.get('git_command') or us.get('git_binary'):
+                command[0] = s.get('git_command') or us.get('git_binary')
             elif GIT:
                 command[0] = GIT
         if command[0] == 'gitk' and s.get('gitk_command'):
