@@ -70,13 +70,19 @@ def view_contents(view):
 
 
 def plugin_file(name):
-    return os.path.join(PLUGIN_DIRECTORY, name)
+    return PLUGIN_DIRECTORY + '/' + name
 
 
 def do_when(conditional, callback, *args, **kwargs):
     if conditional():
         return callback(*args, **kwargs)
     sublime.set_timeout(functools.partial(do_when, conditional, callback, *args, **kwargs), 50)
+
+
+def goto_xy(view, line, col):
+    view.run_command("goto_line", {"line": line})
+    for i in range(col):
+        view.run_command("move", {"by": "characters", "forward": True})
 
 
 def _make_text_safeish(text, fallback_encoding, method='decode'):
@@ -163,11 +169,15 @@ class CommandThread(threading.Thread):
                 startupinfo = subprocess.STARTUPINFO()
                 startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
 
+            shell = False
+            if sublime.platform() == 'windows':
+                shell = True
+
             # universal_newlines seems to break `log` in python3
             proc = subprocess.Popen(self.command,
                 stdout=self.stdout, stderr=subprocess.STDOUT,
                 stdin=subprocess.PIPE, startupinfo=startupinfo,
-                shell=False, universal_newlines=False)
+                shell=shell, universal_newlines=False)
             output = proc.communicate(self.stdin)[0]
             if not output:
                 output = ''
@@ -382,6 +392,55 @@ class GitCustomCommand(GitWindowCommand):
         command_splitted = ['git'] + shlex.split(command)
         print(command_splitted)
         self.run_command(command_splitted)
+
+
+class GitRawCommand(GitWindowCommand):
+    may_change_files = True
+
+    def run(self, **args):
+        self.command = str(args.get('command', ''))
+        show_in = str(args.get('show_in', 'pane_below'))
+
+        if self.command.strip() == "":
+            self.panel("No git command provided")
+            return
+        import shlex
+        command_split = shlex.split(self.command)
+
+        if args.get('append_current_file', False) and self._active_file_name():
+            command_split.extend(('--', self._active_file_name()))
+
+        print(command_split)
+
+        self.may_change_files = bool(args.get('may_change_files', True))
+
+        if show_in == 'pane_below':
+            self.run_command(command_split)
+        elif show_in == 'quick_panel':
+            self.run_command(command_split, self.show_in_quick_panel)
+        elif show_in == 'new_tab':
+            self.run_command(command_split, self.show_in_new_tab)
+        elif show_in == 'suppress':
+            self.run_command(command_split, self.do_nothing)
+
+    def show_in_quick_panel(self, result):
+        self.results = list(result.rstrip().split('\n'))
+        if len(self.results):
+            self.quick_panel(self.results,
+                self.do_nothing, sublime.MONOSPACE_FONT)
+        else:
+            sublime.status_message("Nothing to show")
+
+    def do_nothing(self, picked):
+        return
+
+    def show_in_new_tab(self, result):
+        msg = self.window.new_file()
+        msg.set_scratch(True)
+        msg.set_name(self.command)
+        self._output_to_view(msg, result)
+        msg.sel().clear()
+        msg.sel().add(sublime.Region(0, 0))
 
 
 class GitGuiCommand(GitTextCommand):

@@ -1,7 +1,7 @@
 import os
 
 import sublime
-from .git import GitTextCommand, GitWindowCommand, git_root_exist
+from .git import GitWindowCommand, git_root_exist
 
 
 class GitInit(object):
@@ -61,7 +61,7 @@ class GitPullCommand(GitWindowCommand):
     extra_flags = []
 
     def run(self):
-        self.run_command(['git', 'remote'], callback=self.remote_done) 
+        self.run_command(['git', 'remote'], callback=self.remote_done)
 
     def remote_done(self, result):
         self.remotes = result.rstrip().split('\n')
@@ -69,7 +69,7 @@ class GitPullCommand(GitWindowCommand):
             self.panel_done()
         else:
             self.quick_panel(self.remotes, self.panel_done, sublime.MONOSPACE_FONT)
-    
+
     def panel_done(self, picked=0):
         if picked < 0 or picked >= len(self.remotes):
             return
@@ -126,7 +126,7 @@ class GitDeleteTagCommand(GitWindowCommand):
             return
         picked_tag = self.results[picked]
         picked_tag = picked_tag.strip()
-        if sublime.ok_cancel_dialog("Delete \"%s\" Tag?" % picked_tag, "Delete"):   
+        if sublime.ok_cancel_dialog("Delete \"%s\" Tag?" % picked_tag, "Delete"):
             self.run_command(['git', 'tag', '-d', picked_tag])
 
 
@@ -175,7 +175,7 @@ class GitCheckoutCommand(GitTextCommand):
 
     def run(self, edit):
         self.run_command(['git', 'checkout', self.get_file_name()])
-        
+
 
 class GitCheckoutCommitCommand(GitWindowCommand):
     may_change_files = True
@@ -197,7 +197,7 @@ class GitCheckoutCommitCommand(GitWindowCommand):
 
     def cherry_pick(self, ref):
         self.run_command(['git', 'checkout', ref])
-        
+
 
 class GitFetchCommand(GitPullCommand):
     command_to_run_after_remote = 'fetch'
@@ -237,7 +237,7 @@ class GitPushCurrentBranchCommand(GitPullCurrentBranchCommand):
 
 
 class GitCherryPickCommand(GitWindowCommand):
-    
+
     def run(self):
         command = ['git', 'log', '--all', '--pretty=%s\a%h %an <%aE>\a%ad (%ar)', '--date=local', '--max-count=9000']
         self.run_command(command, callback=self.log_done)

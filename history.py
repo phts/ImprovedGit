@@ -1,6 +1,6 @@
 import functools
-import os
 import re
+from operator import methodcaller
 
 import sublime
 from .git import GitTextCommand, GitWindowCommand, plugin_file
@@ -12,19 +12,11 @@ class GitBlameCommand(GitTextCommand):
         # -w: ignore whitespace changes
         # -M: retain blame when moving lines
         # -C: retain blame when copying lines between files
-        command = ['git', 'blame', '-w', '-M', '-C', '--date=short', '--abbrev=6']
+        command = ['git', 'blame', '-w', '-M', '-C']
 
-        s = sublime.load_settings("Git.sublime-settings")
-        selection = self.view.sel()[0]  # todo: multi-select support?
-        if not selection.empty() or not s.get('blame_whole_file'):
-            # just the lines we have a selection on
-            begin_line, begin_column = self.view.rowcol(selection.begin())
-            end_line, end_column = self.view.rowcol(selection.end())
-            # blame will fail if last line is empty and is included in the selection
-            if end_line > begin_line and end_column == 0:
-                end_line -= 1
-            lines = str(begin_line + 1) + ',' + str(end_line + 1)
-            command.extend(('-L', lines))
+        lines = self.get_lines()
+        if lines:
+            command.extend(('-L', str(lines[0]) + ',' + str(lines[1])))
             callback = self.blame_done
         else:
             callback = functools.partial(self.blame_done,
@@ -32,6 +24,19 @@ class GitBlameCommand(GitTextCommand):
 
         command.append(self.get_file_name())
         self.run_command(command, callback)
+
+    def get_lines(self):
+        selection = self.view.sel()[0]  # todo: multi-select support?
+        if selection.empty():
+            return False
+        # just the lines we have a selection on
+        begin_line, begin_column = self.view.rowcol(selection.begin())
+        end_line, end_column = self.view.rowcol(selection.end())
+        # blame will fail if last line is empty and is included in the selection
+        if end_line > begin_line and end_column == 0:
+            end_line -= 1
+        # add one to each, to line up sublime's index with git's
+        return begin_line + 1, end_line + 1
 
     def blame_done(self, result, position=None):
         self.scratch(result, title="Git Blame", position=position,
@@ -68,26 +73,7 @@ class GitLog(object):
             self.log_done)
 
     def log_done(self, result):
-        self.results = []
-        self.files = {}
-        relative = None
-        for r in result.strip().split('\n'):
-            if r:
-                _result = r.strip().split('\a', 2)
-                if len(_result) == 1:
-                    if relative is None:
-                        # Find relative path
-                        relative = os.sep.join(['..'] * (len(os.path.normpath(_result[0]).split(os.sep)) - 1))
-                        if relative:
-                            relative += os.sep
-                    ref = result[0].split(' ', 1)[0]
-                    self.files[ref] = relative + _result[0]
-                else:
-                    result = _result
-                    ref = result[1].split(' ', 1)
-                    result[0] = u"%s - %s" % (ref[0], result[0])
-                    result[1] = ref[1]
-                    self.results.append(result)
+        self.results = [r.split('\a', 2) for r in result.strip().split('\n')]
         self.quick_panel(self.results, self.log_panel_done)
 
     def log_panel_done(self, picked):
@@ -95,19 +81,14 @@ class GitLog(object):
             return
         item = self.results[picked]
         # the commit hash is the first thing on the second line
-        ref = item[0].split(' ', 1)[0]
-        fn = self.get_file_name()
-        file_name = self.files.get(ref, fn)
-        self.log_result(ref, file_name, fn != '')
+        self.log_result(item[1].split(' ')[0])
 
-    def log_result(self, ref, file_name, follow):
+    def log_result(self, ref):
         # I'm not certain I should have the file name here; it restricts the
         # details to just the current file. Depends on what the user expects...
         # which I'm not sure of.
-        command = ['git', 'log', '--follow' if follow else None, '-p', '-1', ref]
-        command.extend(['--', file_name])
         self.run_command(
-            command,
+            ['git', 'log', '-p', '-1', ref, '--', self.get_file_name()],
             self.details_done)
 
     def details_done(self, result):
@@ -126,32 +107,13 @@ class GitShow(object):
     def run(self, edit=None):
         # GitLog Copy-Past
         self.run_command(
-            ['git', 'log', '--follow', '--name-only', '--pretty=%s\a%h %an <%aE>\a%ad (%ar)',
+            ['git', 'log', '--pretty=%s\a%h %an <%aE>\a%ad (%ar)',
             '--date=local', '--max-count=9000', '--', self.get_file_name()],
             self.show_done)
 
     def show_done(self, result):
         # GitLog Copy-Past
-        self.results = []
-        self.files = {}
-        relative = None
-        for r in result.strip().split('\n'):
-            if r:
-                _result = r.strip().split('\a', 2)
-                if len(_result) == 1:
-                    if relative is None:
-                        # Find relative path
-                        relative = os.sep.join(['..'] * (len(os.path.normpath(_result[0]).split(os.sep)) - 1))
-                        if relative:
-                            relative += os.sep
-                    ref = result[0].split(' ', 1)[0]
-                    self.files[ref] = relative + _result[0]
-                else:
-                    result = _result
-                    ref = result[1].split(' ', 1)
-                    result[0] = u"%s - %s" % (ref[0], result[0])
-                    result[1] = ref[1]
-                    self.results.append(result)
+        self.results = [r.split('\a', 2) for r in result.strip().split('\n')]
         self.quick_panel(self.results, self.panel_done)
 
     def panel_done(self, picked):
@@ -159,7 +121,7 @@ class GitShow(object):
             return
         item = self.results[picked]
         # the commit hash is the first thing on the second line
-        ref = item[0].split(' ', 1)[0]
+        ref = item[1].split(' ')[0]
         self.run_command(
             ['git', 'show', '%s:%s' % (ref, self.get_relative_file_name())],
             self.details_done,
@@ -210,7 +172,7 @@ class GitOpenFileCommand(GitLog, GitWindowCommand):
     def branch_panel_done(self, picked):
         if 0 > picked < len(self.results):
             return
-        self.branch = self.results[picked].rsplit(' ', 1)[-1]
+        self.branch = self.results[picked].split(' ')[-1]
         self.run_log(False, self.branch)
 
     def log_result(self, result_hash):
@@ -241,3 +203,34 @@ class GitOpenFileCommand(GitLog, GitWindowCommand):
 
     def show_done(self, result):
         self.scratch(result, title="%s:%s" % (self.fileRef, self.filename))
+
+
+class GitDocumentCommand(GitBlameCommand):
+    def get_lines(self):
+        selection = self.view.sel()[0]  # todo: multi-select support?
+        # just the lines we have a selection on
+        begin_line, begin_column = self.view.rowcol(selection.begin())
+        end_line, end_column = self.view.rowcol(selection.end())
+        # blame will fail if last line is empty and is included in the selection
+        if end_line > begin_line and end_column == 0:
+            end_line -= 1
+        # add one to each, to line up sublime's index with git's
+        return begin_line + 1, end_line + 1
+
+    def blame_done(self, result, position=None):
+        shas = set((sha for sha in re.findall(r'^[0-9a-f]+', result, re.MULTILINE) if not re.match(r'^0+$', sha)))
+        command = ['git', 'show', '-s', '-z', '--no-color', '--date=iso']
+        command.extend(shas)
+
+        self.run_command(command, self.show_done)
+
+    def show_done(self, result):
+        commits = []
+        for commit in result.split('\0'):
+            match = re.search(r'^Date:\s+(.+)$', commit, re.MULTILINE)
+            if match:
+                commits.append((match.group(1), commit))
+        commits.sort(reverse=True)
+        commits = [commit for d, commit in commits]
+
+        self.scratch('\n\n'.join(commits), title="Git Commit Documentation")
