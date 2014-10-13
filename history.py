@@ -1,6 +1,6 @@
+import sublime_plugin
 import functools
 import re
-from operator import methodcaller
 
 import sublime
 from .git import GitTextCommand, GitWindowCommand, plugin_file
@@ -65,7 +65,7 @@ class GitLog(object):
         # 9000 is a pretty arbitrarily chosen limit; picked entirely because
         # it's about the size of the largest repo I've tested this on... and
         # there's a definite hiccup when it's loading that
-        command = ['git', 'log', '--pretty=%s\a%h %an <%aE>\a%ad (%ar)',
+        command = ['git', 'log', '--pretty=%s (%h)\a%an <%aE>\a%ad (%ar)',
             '--date=local', '--max-count=9000', '--follow' if follow else None]
         command.extend(args)
         self.run_command(
@@ -80,8 +80,9 @@ class GitLog(object):
         if 0 > picked < len(self.results):
             return
         item = self.results[picked]
-        # the commit hash is the first thing on the second line
-        self.log_result(item[1].split(' ')[0])
+        # the commit hash is the last thing on the first line, in brackets
+        ref = item[0].split(' ')[-1].strip('()')
+        self.log_result(ref)
 
     def log_result(self, ref):
         # I'm not certain I should have the file name here; it restricts the
@@ -107,7 +108,7 @@ class GitShow(object):
     def run(self, edit=None):
         # GitLog Copy-Past
         self.run_command(
-            ['git', 'log', '--pretty=%s\a%h %an <%aE>\a%ad (%ar)',
+            ['git', 'log', '--pretty=%s (%h)\a%an <%aE>\a%ad (%ar)',
             '--date=local', '--max-count=9000', '--', self.get_file_name()],
             self.show_done)
 
@@ -120,8 +121,8 @@ class GitShow(object):
         if 0 > picked < len(self.results):
             return
         item = self.results[picked]
-        # the commit hash is the first thing on the second line
-        ref = item[1].split(' ')[0]
+        # the commit hash is the last thing on the first line, in brackets
+        ref = item[0].split(' ')[-1].strip('()')
         self.run_command(
             ['git', 'show', '%s:%s' % (ref, self.get_relative_file_name())],
             self.details_done,
@@ -176,7 +177,6 @@ class GitOpenFileCommand(GitLog, GitWindowCommand):
         self.run_log(False, self.branch)
 
     def log_result(self, result_hash):
-        # the commit hash is the first thing on the second line
         self.ref = result_hash
         self.run_command(
             ['git', 'ls-tree', '-r', '--full-tree', self.ref],
@@ -234,3 +234,12 @@ class GitDocumentCommand(GitBlameCommand):
         commits = [commit for d, commit in commits]
 
         self.scratch('\n\n'.join(commits), title="Git Commit Documentation")
+
+
+class GitGotoBlame(sublime_plugin.TextCommand):
+    def run(self, edit):
+        line = self.view.substr(self.view.line(self.view.sel()[0].a))
+        commit = line.split(" ")[0]
+        if not commit or commit == "00000000":
+            return
+        self.view.window().run_command("git_raw", {"command": "git show %s" % commit, "show_in": "new_tab", "may_change_files": False})
