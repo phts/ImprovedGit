@@ -1,7 +1,9 @@
+from __future__ import absolute_import, unicode_literals, print_function, division
+
 import os
 
 import sublime
-from .git import GitTextCommand, GitWindowCommand, git_root_exist
+from . import GitTextCommand, GitWindowCommand, git_root_exist
 
 
 class GitInit(object):
@@ -97,6 +99,11 @@ class GitNewBranchCommand(GitWindowCommand):
             self.panel("No branch name provided")
             return
         self.run_command(['git', 'checkout', '-b', branchname])
+
+
+class GitTrackRemoteBranchCommand(GitBranchCommand):
+	command_to_run_after_branch = ['checkout', '-t']
+	extra_flags = ['-r']
 
 
 class GitNewTagCommand(GitWindowCommand):
@@ -201,6 +208,10 @@ class GitCheckoutCommitCommand(GitWindowCommand):
 
 class GitFetchCommand(GitPullCommand):
     command_to_run_after_remote = 'fetch'
+
+class GitPullRebaseCommand(GitWindowCommand):
+    def run(self):
+        self.run_command(['git', 'pull', '--rebase'], callback=self.panel)
 
 
 class GitPullCurrentBranchCommand(GitWindowCommand):

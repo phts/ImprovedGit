@@ -1,8 +1,10 @@
+from __future__ import absolute_import, unicode_literals, print_function, division
+
 import os
 import re
 
 import sublime
-from .git import GitWindowCommand, git_root
+from . import GitWindowCommand, git_root
 
 
 class GitStatusCommand(GitWindowCommand):
@@ -52,8 +54,12 @@ class GitStatusCommand(GitWindowCommand):
                 # set_timeout to workaround this issue.
                 sublime.set_timeout(lambda: self.window.open_file(file_name), 0)
         else:
-            self.run_command(['git', 'diff', '--no-color', '--', picked_file.strip('"')],
-                self.diff_done, working_dir=root)
+            if s.get('diff_tool'):
+                self.run_command(['git', 'difftool', '--', picked_file.strip('"')],
+                    working_dir=root)
+            else:
+                self.run_command(['git', 'diff', '--no-color', '--', picked_file.strip('"')],
+                    self.diff_done, working_dir=root)
 
     def diff_done(self, result):
         if not result.strip():

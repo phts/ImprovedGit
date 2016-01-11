@@ -1,9 +1,11 @@
-import sublime_plugin
+from __future__ import absolute_import, unicode_literals, print_function, division
+
 import functools
 import re
 
 import sublime
-from .git import GitTextCommand, GitWindowCommand, plugin_file
+import sublime_plugin
+from . import GitTextCommand, GitWindowCommand, plugin_file
 
 
 class GitBlameCommand(GitTextCommand):
@@ -39,8 +41,10 @@ class GitBlameCommand(GitTextCommand):
         return begin_line + 1, end_line + 1
 
     def blame_done(self, result, position=None):
-        self.scratch(result, title="Git Blame", position=position,
-                syntax=plugin_file("syntax/Git Blame.tmLanguage"))
+        view = self.scratch(result, title="Git Blame", position=position,
+                            syntax=plugin_file("syntax/Git Blame.tmLanguage"))
+        # store working dir to be potentially used by the GitGotoCommit command
+        view.settings().set("git_working_dir", self.get_working_dir())
 
 
 class GitGuiBlameCommand(GitTextCommand):
@@ -65,7 +69,7 @@ class GitLog(object):
         # 9000 is a pretty arbitrarily chosen limit; picked entirely because
         # it's about the size of the largest repo I've tested this on... and
         # there's a definite hiccup when it's loading that
-        command = ['git', 'log', '--pretty=%s (%h)\a%an <%aE>\a%ad (%ar)',
+        command = ['git', 'log', '--no-color', '--pretty=%s (%h)\a%an <%aE>\a%ad (%ar)',
             '--date=local', '--max-count=9000', '--follow' if follow else None]
         command.extend(args)
         self.run_command(
@@ -89,11 +93,12 @@ class GitLog(object):
         # details to just the current file. Depends on what the user expects...
         # which I'm not sure of.
         self.run_command(
-            ['git', 'log', '-p', '-1', ref, '--', self.get_file_name()],
+            ['git', 'log', '--no-color', '-p', '-1', ref, '--', self.get_file_name()],
             self.details_done)
 
     def details_done(self, result):
-        self.scratch(result, title="Git Commit Details", syntax=plugin_file("syntax/Git Commit Message.tmLanguage"))
+        self.scratch(result, title="Git Commit Details",
+                     syntax=plugin_file("syntax/Git Commit View.tmLanguage"))
 
 
 class GitLogCommand(GitLog, GitTextCommand):
@@ -108,7 +113,7 @@ class GitShow(object):
     def run(self, edit=None):
         # GitLog Copy-Past
         self.run_command(
-            ['git', 'log', '--pretty=%s (%h)\a%an <%aE>\a%ad (%ar)',
+            ['git', 'log', '--no-color', '--pretty=%s (%h)\a%an <%aE>\a%ad (%ar)',
             '--date=local', '--max-count=9000', '--', self.get_file_name()],
             self.show_done)
 
@@ -233,13 +238,23 @@ class GitDocumentCommand(GitBlameCommand):
         commits.sort(reverse=True)
         commits = [commit for d, commit in commits]
 
-        self.scratch('\n\n'.join(commits), title="Git Commit Documentation")
+        self.scratch('\n\n'.join(commits), title="Git Commit Documentation",
+                     syntax=plugin_file("syntax/Git Commit View.tmLanguage"))
 
 
-class GitGotoBlame(sublime_plugin.TextCommand):
+class GitGotoCommit(GitTextCommand):
     def run(self, edit):
-        line = self.view.substr(self.view.line(self.view.sel()[0].a))
+        view = self.view
+        line = view.substr(view.line(view.sel()[0].a))
         commit = line.split(" ")[0]
         if not commit or commit == "00000000":
             return
-        self.view.window().run_command("git_raw", {"command": "git show %s" % commit, "show_in": "new_tab", "may_change_files": False})
+        working_dir = view.settings().get("git_working_dir")
+        self.run_command(['git', 'show', commit], self.show_done, working_dir=working_dir)
+
+    def show_done(self, result):
+        self.scratch(result, title="Git Commit View",
+                     syntax=plugin_file("syntax/Git Commit View.tmLanguage"))
+
+    def is_enabled(self):
+        return True

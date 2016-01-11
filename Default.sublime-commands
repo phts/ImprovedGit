@@ -86,6 +86,14 @@
         "command": "git_raw", "args": { "command": "git difftool", "may_change_files": false }
     }
     ,{
+        "caption": "Git: Diff Tool Current File Staged",
+        "command": "git_diff_tool_commit"
+    }
+    ,{
+        "caption": "Git: Diff Tool Staged",
+        "command": "git_diff_tool_commit_all"
+    }
+    ,{
         "caption": "Git: Commit",
         "command": "git_commit"
     }
@@ -118,6 +126,10 @@
         "command": "git_branch"
     }
     ,{
+        "caption": "Git: Track Remote Branch",
+        "command": "git_track_remote_branch"
+    }
+    ,{
         "caption": "Git: Merge Branch",
         "command": "git_merge"
     }
@@ -142,12 +154,20 @@
         "command": "git_stash_drop"
     }
     ,{
+        "caption": "Git: Stash List",
+        "command": "git_stash_list"
+    }
+    ,{
         "caption": "Git: Add Current File",
         "command": "git_raw", "args": { "command": "git add", "append_current_file": true }
     }
     ,{
         "caption": "Git: Add...",
         "command": "git_add_choice"
+    }
+    ,{
+        "caption": "Git: Add All",
+        "command": "git_raw", "args": { "command": "git add -A" }
     }
     ,{
         "caption": "Git: Checkout Current File",
@@ -164,6 +184,10 @@
     ,{
         "caption": "Git: Pull Using Rebase",
         "command": "git_raw", "args": { "command": "git pull --rebase" }
+    }
+    ,{
+        "caption": "Git: Pull Using Rebase",
+        "command": "git_pull_rebase"
     }
     ,{
         "caption": "Git: Pull Current Branch",
@@ -194,7 +218,7 @@
         "command": "git_custom"
     }
     ,{
-        "caption": "Git Flow: Feature Start", 
+        "caption": "Git Flow: Feature Start",
         "command": "git_flow_feature_start"
     }
     ,{
@@ -244,6 +268,10 @@
     ,{
         "caption": "Git: Gui",
         "command": "git_gui"
+    }
+    ,{
+        "caption": "Git: Gitk This File",
+        "command": "git_gitk_this_file"
     }
     ,{
         "caption": "Git: Gitk",

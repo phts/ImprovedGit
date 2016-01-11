@@ -1,3 +1,5 @@
+from __future__ import absolute_import, unicode_literals, print_function, division
+
 import os
 import sublime
 import sublime_plugin
@@ -6,19 +8,25 @@ import subprocess
 import functools
 import os.path
 import time
-
 from .progress import Progress
-
-# In a complete inversion from ST2, in ST3 when a plugin is loaded we
-# actually can trust __file__.
-# Goal is to get: "Packages/Git", allowing for people who rename things
 
 git_root_cache = {}
 
-def find_plugin_directory(f):
-    dirname = os.path.split(os.path.dirname(f))[-1]
+
+# Goal is to get: "Packages/Git", allowing for people who rename things
+def find_plugin_directory():
+    if __file__.startswith('./'):
+        # ST2, we get "./git/__init__.py" which is pretty useless since we want the part above that
+        # However, os.getcwd() is the plugin directory!
+        full = os.getcwd()
+    else:
+        # In a complete inversion, in ST3 when a plugin is loaded we
+        # actually can trust __file__. It'll be something like:
+        # /Users/dlynch/Library/Application Support/Sublime Text 3/Packages/Git/git/__init__.py
+        full = os.path.normpath(os.path.join(os.path.dirname(__file__), '..'))
+    dirname = os.path.split(full)[-1]
     return "Packages/" + dirname.replace(".sublime-package", "")
-PLUGIN_DIRECTORY = find_plugin_directory(__file__)
+PLUGIN_DIRECTORY = find_plugin_directory()
 
 
 def main_thread(callback, *args, **kwargs):
@@ -73,10 +81,10 @@ def plugin_file(name):
     return PLUGIN_DIRECTORY + '/' + name
 
 
-def do_when(conditional, callback, *args, **kwargs):
+def do_when(conditional, command, *args, **kwargs):
     if conditional():
-        return callback(*args, **kwargs)
-    sublime.set_timeout(functools.partial(do_when, conditional, callback, *args, **kwargs), 50)
+        return command(*args, **kwargs)
+    sublime.set_timeout(functools.partial(do_when, conditional, command, *args, **kwargs), 50)
 
 
 def goto_xy(view, line, col):
@@ -106,7 +114,9 @@ def _test_paths_for_executable(paths, test_file):
         file_path = os.path.join(directory, test_file)
         if os.path.exists(file_path) and os.access(file_path, os.X_OK):
             return file_path
-def find_git():
+
+
+def find_binary(cmd):
     # It turns out to be difficult to reliably run git, with varying paths
     # and subprocess environments across different platforms. So. Let's hack
     # this a bit.
@@ -114,30 +124,31 @@ def find_git():
     # attitude. But that involves a lot more arguing with people.)
     path = os.environ.get('PATH', '').split(os.pathsep)
     if os.name == 'nt':
-        git_cmd = 'git.exe'
-    else:
-        git_cmd = 'git'
+        cmd = cmd + '.exe'
 
-    git_path = _test_paths_for_executable(path, git_cmd)
+    path = _test_paths_for_executable(path, cmd)
 
-    if not git_path:
+    if not path:
         # /usr/local/bin:/usr/local/git/bin
         if os.name == 'nt':
             extra_paths = (
-                os.path.join(os.environ["ProgramFiles"], "Git", "bin"),
-                os.path.join(os.environ["ProgramFiles(x86)"], "Git", "bin"),
+                os.path.join(os.environ.get("ProgramFiles", ""), "Git", "bin"),
+                os.path.join(os.environ.get("ProgramFiles(x86)", ""), "Git", "bin"),
             )
         else:
             extra_paths = (
                 '/usr/local/bin',
                 '/usr/local/git/bin',
             )
-        git_path = _test_paths_for_executable(extra_paths, git_cmd)
-    return git_path
-GIT = find_git()
+        path = _test_paths_for_executable(extra_paths, cmd)
+    return path
+GIT = find_binary('git')
+GITK = find_binary('gitk')
 
 
 class CommandThread(threading.Thread):
+    command_lock = threading.Lock()
+
     def __init__(self, command, on_done, working_dir="", fallback_encoding="", **kwargs):
         threading.Thread.__init__(self)
         self.command = command
@@ -155,14 +166,16 @@ class CommandThread(threading.Thread):
         self.kwargs = kwargs
 
     def run(self):
-        try:
-            # Ignore directories that no longer exist
-            if not os.path.isdir(self.working_dir):
-                return
+        # Ignore directories that no longer exist
+        if not os.path.isdir(self.working_dir):
+            return
 
+        self.command_lock.acquire()
+        output = ''
+        callback = self.on_done
+        try:
             if self.working_dir != "":
                 os.chdir(self.working_dir)
-
             # Windows needs startupinfo in order to start process in background
             startupinfo = None
             if os.name == 'nt':
@@ -173,32 +186,34 @@ class CommandThread(threading.Thread):
             if sublime.platform() == 'windows':
                 shell = True
 
+            env = os.environ.copy()
+            if sublime.platform() == 'windows' and 'HOME' not in env:
+                env['HOME'] = env['USERPROFILE']
+
             # universal_newlines seems to break `log` in python3
             proc = subprocess.Popen(self.command,
                 stdout=self.stdout, stderr=subprocess.STDOUT,
                 stdin=subprocess.PIPE, startupinfo=startupinfo,
-                shell=shell, universal_newlines=False)
+                shell=shell, universal_newlines=False,
+                env=env)
             output = proc.communicate(self.stdin)[0]
             if not output:
                 output = ''
-
-            main_thread(self.on_done,
-                _make_text_safeish(output, self.fallback_encoding), **self.kwargs)
+            output = _make_text_safeish(output, self.fallback_encoding)
         except subprocess.CalledProcessError as e:
-            main_thread(self.on_done, e.returncode)
+            output = e.returncode
         except OSError as e:
+            callback = sublime.error_message
             if e.errno == 2:
-                main_thread(sublime.error_message, "Git binary could not be found in PATH\n\nConsider using the git_command setting for the Git plugin\n\nPATH is: %s" % os.environ['PATH'])
+                global _has_warned
+                if not _has_warned:
+                    _has_warned = True
+                    output = "{cmd} binary could not be found in PATH\n\nConsider using the {cmd_setting}_command setting for the Git plugin\n\nPATH is: {path}".format(cmd=self.command[0], cmd_setting=self.command[0].replace('-', '_'), path=os.environ['PATH'])
             else:
-                raise e
-
-
-class GitScratchOutputCommand(sublime_plugin.TextCommand):
-    def run(self, edit, output = '', output_file = None, clear = False):
-        if clear:
-            region = sublime.Region(0, self.view.size())
-            self.view.erase(edit, region)
-        self.view.insert(edit, 0, output)
+                output = e.strerror
+        finally:
+            self.command_lock.release()
+            main_thread(callback, output, **self.kwargs)
 
 
 # A base for all commands
@@ -224,9 +239,13 @@ class GitCommand(object):
             elif GIT:
                 command[0] = GIT
         if command[0] == 'gitk' and s.get('gitk_command'):
-            command[0] = s.get('gitk_command')
-        if command[0] == 'git-flow' and s.get('git_flow_command'):
+            if s.get('gitk_command'):
+                command[0] = s.get('gitk_command')
+            elif GITK:
+                command[0] = GITK
+        if command[0] == 'git' and command[1] == 'flow' and s.get('git_flow_command'):
             command[0] = s.get('git_flow_command')
+            del(command[1])
         if not callback:
             callback = self.generic_done
 
@@ -238,7 +257,7 @@ class GitCommand(object):
             Progress(thread, message[0], message[1])
 
 
-    def generic_done(self, result):
+    def generic_done(self, result, **kw):
         if self.may_change_files and self.active_view() and self.active_view().file_name():
             if self.active_view().is_dirty():
                 result = "WARNING: Current view is dirty.\n\n"
@@ -274,6 +293,7 @@ class GitCommand(object):
         scratch_file.set_scratch(True)
         self._output_to_view(scratch_file, output, **kwargs)
         scratch_file.set_read_only(True)
+        scratch_file.settings().set('word_wrap', False)
         if position:
             sublime.set_timeout(lambda: scratch_file.set_viewport_position(position), 0)
         return scratch_file
@@ -371,140 +391,3 @@ class GitTextCommand(GitCommand, sublime_plugin.TextCommand):
         # the case of the quick panel.
         # So, this is not necessarily ideal, but it does work.
         return self.view.window() or sublime.active_window()
-
-
-# A few miscellaneous commands
-
-
-class GitCustomCommand(GitWindowCommand):
-    may_change_files = True
-
-    def run(self):
-        self.get_window().show_input_panel("Git command", "",
-            self.on_input, None, None)
-
-    def on_input(self, command):
-        command = str(command)  # avoiding unicode
-        if command.strip() == "":
-            self.panel("No git command provided")
-            return
-        import shlex
-        command_splitted = ['git'] + shlex.split(command)
-        print(command_splitted)
-        self.run_command(command_splitted)
-
-
-class GitRawCommand(GitWindowCommand):
-    may_change_files = True
-
-    def run(self, **args):
-        self.command = str(args.get('command', ''))
-        show_in = str(args.get('show_in', 'pane_below'))
-
-        if self.command.strip() == "":
-            self.panel("No git command provided")
-            return
-        import shlex
-        command_split = shlex.split(self.command)
-
-        if args.get('append_current_file', False) and self._active_file_name():
-            command_split.extend(('--', self._active_file_name()))
-
-        print(command_split)
-
-        self.may_change_files = bool(args.get('may_change_files', True))
-
-        if show_in == 'pane_below':
-            self.run_command(command_split)
-        elif show_in == 'quick_panel':
-            self.run_command(command_split, self.show_in_quick_panel)
-        elif show_in == 'new_tab':
-            self.run_command(command_split, self.show_in_new_tab)
-        elif show_in == 'suppress':
-            self.run_command(command_split, self.do_nothing)
-
-    def show_in_quick_panel(self, result):
-        self.results = list(result.rstrip().split('\n'))
-        if len(self.results):
-            self.quick_panel(self.results,
-                self.do_nothing, sublime.MONOSPACE_FONT)
-        else:
-            sublime.status_message("Nothing to show")
-
-    def do_nothing(self, picked):
-        return
-
-    def show_in_new_tab(self, result):
-        msg = self.window.new_file()
-        msg.set_scratch(True)
-        msg.set_name(self.command)
-        self._output_to_view(msg, result)
-        msg.sel().clear()
-        msg.sel().add(sublime.Region(0, 0))
-
-
-class GitGuiCommand(GitTextCommand):
-    def run(self, edit):
-        command = ['git', 'gui']
-        self.run_command(command)
-
-
-class GitGitkCommand(GitTextCommand):
-    def run(self, edit):
-        command = ['gitk']
-        self.run_command(command)
-
-
-class GitGitkAllCommand(GitTextCommand):
-    def run(self, edit):
-        command = ['gitk', '--all']
-        self.run_command(command)
-
-
-class GitGitkFileCommand(GitTextCommand):
-    def run(self, edit):
-        command = ['gitk', self.get_file_name()]
-        self.run_command(command)
-
-
-class GitGitkAllFileCommand(GitTextCommand):
-    def run(self, edit):
-        command = ['gitk', '--all', self.get_file_name()]
-        self.run_command(command)
-
-
-class GitGitxCommand(GitTextCommand):
-
-    def is_enabled(self):
-        return sublime.platform() == "osx";
-
-    def run(self, edit):
-        command = ['gitx', '--git-dir=%s' % self.get_working_dir()]
-        self.run_command(command)
-
-
-class GitUpdateIgnoreCommand(sublime_plugin.TextCommand):
-    def run(self, edit):
-        data = self.view.window().project_data()
-        project_file_name = self.view.window().project_file_name()
-        for folder in data['folders']:
-            path = folder['path']
-            if project_file_name:
-                path = os.path.join(os.path.dirname(project_file_name), path)
-            gitignore = os.path.join(path, ".gitignore")
-            print("gitignore path", gitignore)
-            if (os.path.exists(gitignore)):
-                with open(gitignore) as gitignore_file:
-                    if not "folder_exclude_patterns" in folder:
-                        folder["folder_exclude_patterns"] = []
-                    if not "file_exclude_patterns" in folder:
-                        folder["file_exclude_patterns"] = []
-                    for pattern in gitignore_file:
-                        pattern = pattern.strip()
-                        if os.path.isdir(os.path.join(path, pattern)):
-                            if not pattern in folder["folder_exclude_patterns"]:
-                                folder["folder_exclude_patterns"].append(pattern)
-                        else:
-                            if not pattern in folder["file_exclude_patterns"]:
-                                folder["file_exclude_patterns"].append(pattern)
-        self.view.window().set_project_data(data)

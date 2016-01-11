@@ -1,10 +1,12 @@
+from __future__ import absolute_import, unicode_literals, print_function, division
+
 import tempfile
 import re
 import os
 
 import sublime
 import sublime_plugin
-from .git import git_root, GitTextCommand
+from . import git_root, GitTextCommand
 
 
 class GitClearAnnotationCommand(GitTextCommand):
