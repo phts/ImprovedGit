@@ -22,10 +22,15 @@ class GitBlameCommand(GitTextCommand):
             callback = self.blame_done
         else:
             callback = functools.partial(self.blame_done,
-                    position=self.view.viewport_position())
+                                         focused_line=self.get_current_line())
 
         command.append(self.get_file_name())
         self.run_command(command, callback)
+
+    def get_current_line(self):
+        (current_line, column) = self.view.rowcol(self.view.sel()[0].a)
+        # line is 1 based
+        return current_line + 1
 
     def get_lines(self):
         selection = self.view.sel()[0]  # todo: multi-select support?
@@ -40,11 +45,9 @@ class GitBlameCommand(GitTextCommand):
         # add one to each, to line up sublime's index with git's
         return begin_line + 1, end_line + 1
 
-    def blame_done(self, result, position=None):
-        view = self.scratch(result, title="Git Blame", position=position,
+    def blame_done(self, result, focused_line=1):
+        view = self.scratch(result, title="Git Blame", focused_line=focused_line,
                             syntax=plugin_file("syntax/Git Blame.tmLanguage"))
-        # store working dir to be potentially used by the GitGotoCommit command
-        view.settings().set("git_working_dir", self.get_working_dir())
 
 
 class GitGuiBlameCommand(GitTextCommand):
@@ -222,7 +225,7 @@ class GitDocumentCommand(GitBlameCommand):
         # add one to each, to line up sublime's index with git's
         return begin_line + 1, end_line + 1
 
-    def blame_done(self, result, position=None):
+    def blame_done(self, result, focused_line=1):
         shas = set((sha for sha in re.findall(r'^[0-9a-f]+', result, re.MULTILINE) if not re.match(r'^0+$', sha)))
         command = ['git', 'show', '-s', '-z', '--no-color', '--date=iso']
         command.extend(shas)
@@ -249,7 +252,7 @@ class GitGotoCommit(GitTextCommand):
         commit = line.split(" ")[0]
         if not commit or commit == "00000000":
             return
-        working_dir = view.settings().get("git_working_dir")
+        working_dir = view.settings().get("git_root_dir")
         self.run_command(['git', 'show', commit], self.show_done, working_dir=working_dir)
 
     def show_done(self, result):

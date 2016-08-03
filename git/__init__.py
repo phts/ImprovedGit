@@ -1,6 +1,7 @@
 from __future__ import absolute_import, unicode_literals, print_function, division
 
 import os
+import re
 import sublime
 import sublime_plugin
 import threading
@@ -11,10 +12,16 @@ import time
 from .progress import Progress
 
 git_root_cache = {}
+_has_warned = False
 
 
 # Goal is to get: "Packages/Git", allowing for people who rename things
 def find_plugin_directory():
+    if ".sublime-package" in __file__:
+        # zipped package, all we care about is the bit right before .sublime-package
+        match = re.search(r"([^\\/]+)\.sublime-package", __file__)
+        if match:
+            return "Packages/" + match.group(1)
     if __file__.startswith('./'):
         # ST2, we get "./git/__init__.py" which is pretty useless since we want the part above that
         # However, os.getcwd() is the plugin directory!
@@ -146,10 +153,15 @@ GIT = find_binary('git')
 GITK = find_binary('gitk')
 
 
+def output_error_message(output, *args, **kwargs):
+    # print('error', output, args, kwargs)
+    sublime.error_message(output)
+
+
 class CommandThread(threading.Thread):
     command_lock = threading.Lock()
 
-    def __init__(self, command, on_done, working_dir="", fallback_encoding="", **kwargs):
+    def __init__(self, command, on_done, working_dir="", fallback_encoding="", error_suppresses_output=False, **kwargs):
         threading.Thread.__init__(self)
         self.command = command
         self.on_done = on_done
@@ -163,6 +175,7 @@ class CommandThread(threading.Thread):
         else:
             self.stdout = subprocess.PIPE
         self.fallback_encoding = fallback_encoding
+        self.error_suppresses_output = error_suppresses_output
         self.kwargs = kwargs
 
     def run(self):
@@ -174,36 +187,42 @@ class CommandThread(threading.Thread):
         output = ''
         callback = self.on_done
         try:
+            cwd = None
             if self.working_dir != "":
-                os.chdir(self.working_dir)
+                cwd = self.working_dir
             # Windows needs startupinfo in order to start process in background
             startupinfo = None
             if os.name == 'nt':
                 startupinfo = subprocess.STARTUPINFO()
                 startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
 
+            env = os.environ.copy()
+
             shell = False
             if sublime.platform() == 'windows':
                 shell = True
-
-            env = os.environ.copy()
-            if sublime.platform() == 'windows' and 'HOME' not in env:
-                env['HOME'] = env['USERPROFILE']
+                if 'HOME' not in env:
+                    env[str('HOME')] = str(env['USERPROFILE'])
 
             # universal_newlines seems to break `log` in python3
             proc = subprocess.Popen(self.command,
                 stdout=self.stdout, stderr=subprocess.STDOUT,
                 stdin=subprocess.PIPE, startupinfo=startupinfo,
                 shell=shell, universal_newlines=False,
-                env=env)
+                env=env, cwd=cwd)
             output = proc.communicate(self.stdin)[0]
+            if self.error_suppresses_output and proc.returncode is not None and proc.returncode > 0:
+                output = False
             if not output:
                 output = ''
             output = _make_text_safeish(output, self.fallback_encoding)
         except subprocess.CalledProcessError as e:
-            output = e.returncode
+            if self.error_suppresses_output:
+                output = ''
+            else:
+                output = e.returncode
         except OSError as e:
-            callback = sublime.error_message
+            callback = output_error_message
             if e.errno == 2:
                 global _has_warned
                 if not _has_warned:
@@ -225,9 +244,9 @@ class GitCommand(object):
         if filter_empty_args:
             command = [arg for arg in command if arg]
         if 'working_dir' not in kwargs:
-            kwargs['working_dir'] = self.get_working_dir()
+            kwargs[str('working_dir')] = str(self.get_working_dir())
         if 'fallback_encoding' not in kwargs and self.active_view() and self.active_view().settings().get('fallback_encoding'):
-            kwargs['fallback_encoding'] = self.active_view().settings().get('fallback_encoding').rpartition('(')[2].rpartition(')')[0]
+            kwargs[str('fallback_encoding')] = str(self.active_view().settings().get('fallback_encoding').rpartition('(')[2].rpartition(')')[0])
 
         s = sublime.load_settings("Git.sublime-settings")
         if s.get('save_first') and self.active_view() and self.active_view().is_dirty() and not no_save:
@@ -271,7 +290,7 @@ class GitCommand(object):
 
         view = self.active_view()
         if view and view.settings().get('live_git_annotations'):
-            self.view.run_command('git_annotate')
+            view.run_command('git_annotate')
 
         if not result.strip():
             return
@@ -286,16 +305,16 @@ class GitCommand(object):
         }
         output_file.run_command('git_scratch_output', args)
 
-    def scratch(self, output, title=False, position=None, **kwargs):
+    def scratch(self, output, title=False, focused_line=1, **kwargs):
         scratch_file = self.get_window().new_file()
         if title:
             scratch_file.set_name(title)
         scratch_file.set_scratch(True)
         self._output_to_view(scratch_file, output, **kwargs)
         scratch_file.set_read_only(True)
+        self.record_git_root_to_view(scratch_file)
         scratch_file.settings().set('word_wrap', False)
-        if position:
-            sublime.set_timeout(lambda: scratch_file.set_viewport_position(position), 0)
+        scratch_file.run_command('goto_line', {'line': focused_line})
         return scratch_file
 
     def panel(self, output, **kwargs):
@@ -304,10 +323,20 @@ class GitCommand(object):
         self.output_view.set_read_only(False)
         self._output_to_view(self.output_view, output, clear=True, **kwargs)
         self.output_view.set_read_only(True)
+        self.record_git_root_to_view(self.output_view)
         self.get_window().run_command("show_panel", {"panel": "output.git"})
 
     def quick_panel(self, *args, **kwargs):
         self.get_window().show_quick_panel(*args, **kwargs)
+
+    def record_git_root_to_view(self, view):
+        # Store the git root directory in the view so we can resolve relative paths
+        # when the user wants to navigate to the source file.
+        if self.get_working_dir():
+            root = git_root(self.get_working_dir())
+        else:
+            root = self.active_view().settings().get("git_root_dir")
+        view.settings().set("git_root_dir", root)
 
 
 # A base for all git commands that work with the entire repository
@@ -347,11 +376,10 @@ class GitWindowCommand(GitCommand, sublime_plugin.WindowCommand):
         file_name = self._active_file_name()
         if file_name:
             return os.path.realpath(os.path.dirname(file_name))
-        else:
-            try:  # handle case with no open folder
-                return self.window.folders()[0]
-            except IndexError:
-                return ''
+        try:  # handle case with no open folder
+            return self.window.folders()[0]
+        except IndexError:
+            return ''
 
     def get_window(self):
         return self.window
@@ -378,7 +406,10 @@ class GitTextCommand(GitCommand, sublime_plugin.TextCommand):
         return file_name.replace('\\', '/')  # windows issues
 
     def get_working_dir(self):
-        return os.path.realpath(os.path.dirname(self.view.file_name()))
+        file_name = self.view.file_name()
+        if file_name:
+            return os.path.realpath(os.path.dirname(file_name))
+        return ''
 
     def get_window(self):
         # Fun discovery: if you switch tabs while a command is working,
