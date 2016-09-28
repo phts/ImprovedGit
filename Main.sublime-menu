@@ -119,7 +119,7 @@
                         [
                             {
                                 "command": "open_file",
-                                "args": {"file": "${packages}/Git/Git.sublime-settings"},
+                                "args": {"file": "${packages}/sublime-text-git/Git.sublime-settings"},
                                 "caption": "Settings – Default"
                             },
                             {
