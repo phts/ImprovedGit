@@ -51,6 +51,10 @@
         "command": "git_graph_all"
     }
     ,{
+        "caption": "Git: View selected commits",
+        "command": "git_goto_commit"
+    }
+    ,{
         "caption": "Git: Diff Current File",
         "command": "git_diff"
     }
@@ -112,6 +116,10 @@
     ,{
         "caption": "Git: Checkout Commit",
         "command": "git_checkout_commit"
+    }
+    ,{
+        "caption": "Git: Quick Commit (repo, only already added files)",
+        "command": "git_quick_commit", "args": { "target": false }
     }
     ,{
         "caption": "Git: Status",
@@ -202,8 +210,12 @@
         "command": "git_push_current_branch"
     }
     ,{
-        "caption": "Git: Show Current File",
+        "caption": "Git: Show Previous Version of Current File",
         "command": "git_show"
+    }
+    ,{
+        "caption": "Git: Show Commit By Hash",
+        "command": "git_show_commit"
     }
     ,{
         "caption": "Git: Toggle Annotations",
@@ -300,5 +312,33 @@
     ,{
         "caption": "Git: Update Project Ignored Files",
         "command": "git_update_ignore"
+    }
+    ,{
+        "caption": "Git: Move Current File",
+        "command": "git_file_move"
+    }
+    ,{
+        "caption": "Git: Rename / Move Current File",
+        "command": "git_file_move", "args": { "rename": true }
+    }
+    ,{
+        "caption": "Git: Remove / Delete Current File",
+        "command": "git_raw", "args": { "command": "git rm", "append_current_file": true }
+    }
+    ,{
+        "caption": "Git: Assume Unchanged",
+        "command": "git_update_index_assume_unchanged"
+    }
+    ,{
+        "caption": "Git: No Assume Unchanged",
+        "command": "git_update_index_no_assume_unchanged"
+    }
+    ,{
+        "caption": "Git: Open Local Config",
+        "command": "git_open_config_file"
+    }
+    ,{
+        "caption": "Git: Open Url",
+        "command": "git_open_config_url", "args": { "url_param": "remote.origin.url" }
     }
 ]
