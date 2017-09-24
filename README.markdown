@@ -21,6 +21,6 @@ and my changes.
 
 ## Installation
 
-* Add this repo `https://github.com/phts/sublime-text-git.git` via calling
-  a command `Package Control: Add Repository`
-* Install package `sublime-text-git`
+1. Add this repo `https://github.com/phts/sublime-text-git.git` via calling
+   a command `Package Control: Add Repository`
+2. Install package `sublime-text-git`
