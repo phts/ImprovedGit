@@ -1,5 +1,26 @@
 # Sublime Text 3 plugin: git
 
-This fork is synced with ['python3' branch of kemayo/sublime-text-git](https://github.com/kemayo/sublime-text-git/tree/python3) and is for Sublime Text 3 only.
+This fork contains some commits from Chris---/sublime-text-2-git fork,
+some original pull requests from
+[kemayo/sublime-text-git](https://github.com/kemayo/sublime-text-git)
+and my changes.
 
-Also it contains some commits from Chris---/sublime-text-2-git fork, some original pull requests from [kemayo/sublime-text-git](https://github.com/kemayo/sublime-text-git) and my changes.
+## Changes
+
+### New commands
+
+* Git: Gitk All File - `gitk --all <file>`
+* Git: Gitk File - `gitk <file>`
+* Git: Gitk All - `gitk --all`
+* [Git: Blame (GUI)](https://github.com/kemayo/sublime-text-git/pull/203)
+
+### New features
+
+* [Progress bar](https://github.com/phts/sublime-text-git/commit/7e8b28b042ce3ff393eee304987381dfb3e44e05)
+* [Context menu "Git - This File"](https://github.com/phts/sublime-text-git/commit/26b97012c173a53804f6769b89248c25a0107a2c)
+
+## Installation
+
+* Add this repo `https://github.com/phts/sublime-text-git.git` via calling
+  a command `Package Control: Add Repository`
+* Install package `sublime-text-git`
