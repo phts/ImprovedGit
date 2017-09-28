@@ -16,7 +16,7 @@ and my changes.
 
 ### New features
 
-* [Progress bar](https://github.com/phts/sublime-text-git/commit/7e8b28b042ce3ff393eee304987381dfb3e44e05)
+* All new features from [csch0's fork](https://github.com/csch0/SublimeText-Git)
 * [Context menu "Git - This File"](https://github.com/phts/sublime-text-git/commit/26b97012c173a53804f6769b89248c25a0107a2c)
 
 ## Installation
