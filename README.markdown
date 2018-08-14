@@ -1,4 +1,6 @@
-# Sublime Text 3 plugin: git
+# ImprovedGit
+
+Package for Sublime Text 3.
 
 This fork contains some commits from Chris---/sublime-text-2-git fork,
 some original pull requests from
@@ -19,8 +21,9 @@ and my changes.
 * All new features from [csch0's fork](https://github.com/csch0/SublimeText-Git)
 * [Context menu "Git - This File"](https://github.com/phts/ImprovedGit/commit/26b97012c173a53804f6769b89248c25a0107a2c)
 
-## Installation
+## Install
 
-1. Add this repo `https://github.com/phts/ImprovedGit` via calling
-   a command `Package Control: Add Repository`
-2. Install package `ImprovedGit`
+### Via Package Control
+
+1. Open Command Palette &rarr; `Package Control: Add Repository` &rarr; `https://github.com/phts/ImprovedGit`
+2. Open Command Palette &rarr; `Package Control: Install Package` &rarr; `ImprovedGit`
