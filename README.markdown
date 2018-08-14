@@ -17,10 +17,10 @@ and my changes.
 ### New features
 
 * All new features from [csch0's fork](https://github.com/csch0/SublimeText-Git)
-* [Context menu "Git - This File"](https://github.com/phts/sublime-text-git/commit/26b97012c173a53804f6769b89248c25a0107a2c)
+* [Context menu "Git - This File"](https://github.com/phts/ImprovedGit/commit/26b97012c173a53804f6769b89248c25a0107a2c)
 
 ## Installation
 
-1. Add this repo `https://github.com/phts/sublime-text-git.git` via calling
+1. Add this repo `https://github.com/phts/ImprovedGit` via calling
    a command `Package Control: Add Repository`
-2. Install package `sublime-text-git`
+2. Install package `ImprovedGit`
